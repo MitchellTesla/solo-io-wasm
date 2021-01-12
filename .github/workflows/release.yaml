@@ -1,0 +1,55 @@
+name: release
+
+on:
+  release:
+    types: [published]
+
+env:
+  TAGGED_VERSION: ${{github.event.release.tag_name || '' }}
+
+jobs:
+  build-and-release:
+    name: Build & Release
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Go 1.14
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.14
+    - name: Install Protoc
+      uses: solo-io/setup-protoc@master
+      with:
+        version: '3.6.1'
+    - uses: azure/setup-kubectl@v1
+      id: kubectl
+      with:
+        version: 'v1.18.0'
+    - name: Setup hugo
+      uses: peaceiris/actions-hugo@v2
+      with:
+        hugo-version: "0.69.2"
+    - uses: actions/cache@v1
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    - name: Login to gcloud registry
+      id: gcloud
+      uses: elgohr/gcloud-login-action@0.2
+      with:
+        account_key: ${{ secrets.GCLOUD_KEY }}
+    - name: Release
+      if: github.event.release.tag_name
+      working-directory: ./tools/wasme/cli
+      env:
+        KUBECTL: ${{ steps.kubectl.outputs.kubectl-path }}
+        QUAY_IO_PASSWORD: ${{ secrets.QUAY_IO_PASSWORD }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TAGGED_VERSION: ${{ github.event.release.tag_name }}
+        GCR_USERNAME: ${{ steps.gcloud.outputs.username }}
+        GCR_PASSWORD: ${{ steps.gcloud.outputs.password }}
+      run: |
+        docker login quay.io --username "solo-io+solobot" --password $QUAY_IO_PASSWORD
+        make install-deps build-images operator-gen manifest-gen publish-images upload-github-release-assets publish-docs
