@@ -1,0 +1,14 @@
+.vscode/
+.idea
+
+# rust output
+target
+
+# example output
+_output/
+
+*.wasm
+
+# generated protos
+vendor_any/
+bazel-*
